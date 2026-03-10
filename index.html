@@ -226,7 +226,7 @@
           <span data-i18n="btn_ios">Download for iOS</span>
         </a>
         <a
-          href="#"
+          href="https://github.com/MicroAGI-Labs/shift-device-connect-distribution/releases/latest/download/shift-device-connect.apk"
           class="btn btn-android"
         >
           <svg viewBox="0 0 24 24" fill="currentColor">
@@ -409,27 +409,26 @@
         }
       })();
 
-      // TODO: Update this URL to the actual GitHub repo for Shift Device Connect
-      // fetch('https://api.github.com/repos/OWNER/shift-device-connect-distribution/releases/latest')
-      //   .then(function(r) { return r.json(); })
-      //   .then(function(data) {
-      //     if (data.tag_name) {
-      //       var badge = document.getElementById('version-badge');
-      //       var a = document.createElement('a');
-      //       a.href = data.html_url;
-      //       a.target = '_blank';
-      //       a.textContent = 'Android ' + data.tag_name;
-      //       badge.appendChild(a);
-      //       if (data.published_at) {
-      //         var date = new Date(data.published_at);
-      //         var formatted = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-      //         var span = document.createElement('span');
-      //         span.textContent = ' · ' + formatted;
-      //         badge.appendChild(span);
-      //       }
-      //     }
-      //   })
-      //   .catch(function() {});
+      fetch('https://api.github.com/repos/MicroAGI-Labs/shift-device-connect-distribution/releases/latest')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.tag_name) {
+            var badge = document.getElementById('version-badge');
+            var a = document.createElement('a');
+            a.href = data.html_url;
+            a.target = '_blank';
+            a.textContent = 'Android ' + data.tag_name;
+            badge.appendChild(a);
+            if (data.published_at) {
+              var date = new Date(data.published_at);
+              var formatted = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+              var span = document.createElement('span');
+              span.textContent = ' · ' + formatted;
+              badge.appendChild(span);
+            }
+          }
+        })
+        .catch(function() {});
     </script>
   </body>
 </html>
