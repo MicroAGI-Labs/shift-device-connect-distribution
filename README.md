@@ -9,31 +9,59 @@ Landing page for sharing Shift Device Connect app download links (TestFlight + A
 1. Enable GitHub Pages: **Settings > Pages > Deploy from branch > main / root**
 2. Create a release with the APK file named `shift-device-connect.apk`
 
-## Updating the APK
+## Publishing a new release
 
-1. Go to **Releases** > **Create a new release**
-2. **Tag:** semantic version, e.g. `v1.0.0`, `v1.1.0`, `v2.0.0`
-3. **Title:** date, e.g. `2026-03-10`
-4. **Description:** changelog (what's new, fixes, etc.)
-5. Attach the APK file — filename must be **`shift-device-connect.apk`**
-6. Click **Publish release**
+Every release uploads **two files**: the APK and a `version.json`. The MicroAGI backend reads `version.json` to decide whether to show an "App update available" banner in the operator app.
 
-The download link on the site always points to the latest release's `shift-device-connect.apk`.
+### Step 1 — Build
 
-## Updating `version.json` (required for in-app update banner)
+Run an EAS production build (Android `preview` profile for the APK, iOS `production` profile for TestFlight) in the operator repo. Note both:
 
-`version.json` is the source of truth the **MicroAGI backend** polls to decide whether the operator app should show an "App update available" banner. It must be updated **every time** a new APK / TestFlight build is published.
+- iOS `Build number` from EAS (auto-incremented integer, e.g. 23)
+- Android `Version code` from EAS (auto-incremented integer, e.g. 4)
 
-After publishing the release:
+### Step 2 — Compose `version.json`
 
-1. Edit `version.json` on `main`.
-2. Set the fields:
-   - `version` — semver string (e.g. `"1.0.1"`) **without a `v` prefix**. Must match `app.json`'s `version` in the operator repo for the build you're shipping.
-   - `iosBuildNumber` — the iOS production build number from EAS (the integer EAS auto-increments via `appVersionSource: "remote"`).
-   - `androidVersionCode` — the Android build's `versionCode`.
-   - `androidDownloadUrl` / `iosDownloadUrl` — usually unchanged.
-   - `publishedAt` — ISO date (`YYYY-MM-DD`).
-   - `releaseNotes` — short summary; surfaces in the update banner.
-3. Commit and push to `main`. GitHub Pages picks it up within a couple of minutes; the backend's `ShiftAppReleaseService` cache TTL controls how quickly clients see the bump after that.
+Copy `version.json` from this repo's root (the file at `main` is a reference template — its values are the *previously released* version's values) and edit the fields for the new release:
 
-The operator app compares its local `Constants.expoConfig.version` (from `app.json`) against `version.json`'s `version` via a semver compare. Mismatched prefixes (`v1.0.1` vs `1.0.0`) silently break the check — keep the field free of `v` prefixes here, even if the GitHub release tag uses one.
+```json
+{
+  "version": "1.0.1",
+  "iosBuildNumber": 24,
+  "androidVersionCode": 5,
+  "androidDownloadUrl": "https://github.com/MicroAGI-Labs/shift-device-connect-distribution/releases/latest/download/shift-device-connect.apk",
+  "iosDownloadUrl": "https://testflight.apple.com/join/z2VEmVXp",
+  "publishedAt": "2026-06-23",
+  "releaseNotes": "Short summary of changes; surfaces in the in-app banner."
+}
+```
+
+| Field | Notes |
+|---|---|
+| `version` | Semver, **no `v` prefix**. Must match the `version` field in the operator repo's `app.json` for the build you're shipping. |
+| `iosBuildNumber` | Integer from EAS. Optional for the banner check, but useful to record. |
+| `androidVersionCode` | Integer from EAS. Same. |
+| `androidDownloadUrl` / `iosDownloadUrl` | Usually unchanged release-to-release. |
+| `publishedAt` | ISO date (`YYYY-MM-DD`). |
+| `releaseNotes` | Short summary; surfaces in the banner. |
+
+### Step 3 — Create the GitHub release
+
+1. Go to **Releases > Draft a new release**.
+2. **Tag:** e.g. `v1.0.1`. (The tag string itself doesn't matter to the backend — it reads `version.json`, not the tag — but keep `v`-prefixed tags for GitHub convention.)
+3. **Title:** date, or `v1.0.1`, whichever you prefer.
+4. **Description:** human-readable changelog.
+5. **Attach both files:**
+   - `shift-device-connect.apk`
+   - `version.json` (the one you composed in Step 2)
+6. Click **Publish release**.
+
+### Step 4 — (Optional) Update `version.json` on `main`
+
+Commit the same `version.json` to `main` so anyone browsing the repo at a glance sees the current shipped version. Not required for the banner — the backend reads only the release asset — but it keeps the repo honest and gives the next release a fresh template.
+
+### How the backend consumes it
+
+The backend's `ShiftAppReleaseService` fetches `https://github.com/MicroAGI-Labs/shift-device-connect-distribution/releases/latest/download/version.json` and caches the result for **5 minutes**. Once a new release is published, app clients see the new version on the next foreground after the cache window expires.
+
+The operator app compares its local `Constants.expoConfig.version` (from `app.json`, baked at build time) against `version.json.version` via a semver compare. The backend defensively strips a leading `v` if present, but the convention in `version.json` is no prefix.
