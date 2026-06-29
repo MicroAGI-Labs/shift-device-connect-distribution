@@ -11,57 +11,60 @@ Landing page for sharing Shift Device Connect app download links (TestFlight + A
 
 ## Publishing a new release
 
-Every release uploads **two files**: the APK and a `version.json`. The MicroAGI backend reads `version.json` to decide whether to show an "App update available" banner in the operator app.
+The MicroAGI backend manages most of this for you. When you trigger a production build with EAS, the backend gets notified, finds (or creates) an open **draft** release here, and writes the APK + a `version.json` onto it. You just review and publish.
 
-### Step 1 — Build
+### Per-release flow
 
-Run an EAS production build (Android `preview` profile for the APK, iOS `production` profile for TestFlight) in the operator repo. Note both:
+1. **`eas build --platform android --profile production`** (operator repo)
+2. **`eas build --platform ios --profile production`** (operator repo)
+3. **`eas submit --platform ios --latest`** — uploads the iOS build to TestFlight
+4. Wait for Apple to finish TestFlight processing (you'll get an email; usually 15–60 min)
+5. Verify in the TestFlight app on your phone that the new iOS build is downloadable
+6. Open **Releases** here → the open draft already exists (the backend put it there). It already has:
+   - `shift-device-connect.apk` attached as an asset
+   - `version.json` with the correct `iosBuildNumber` + `androidVersionCode` filled in
+7. Edit the draft: set a tag (e.g. `v1.0.0-build5`, doesn't matter to the backend), write release notes
+8. Click **Publish release**
 
-- iOS `Build number` from EAS (auto-incremented integer, e.g. 23)
-- Android `Version code` from EAS (auto-incremented integer, e.g. 4)
+The moment you publish, GitHub fires a webhook to the backend. The backend reads `version.json` from the published release's assets, stores the per-platform build numbers as the new "latest", and the operator app's "App update available" banner fires for any user on an older build.
 
-### Step 2 — Compose `version.json`
+### What the auto-draft contains
 
-Copy `version.json` from this repo's root (the file at `main` is a reference template — its values are the *previously released* version's values) and edit the fields for the new release:
+`version.json` (auto-written by the backend):
 
 ```json
 {
-  "version": "1.0.1",
+  "version": "1.0.0",
   "iosBuildNumber": 24,
-  "androidVersionCode": 5,
-  "androidDownloadUrl": "https://github.com/MicroAGI-Labs/shift-device-connect-distribution/releases/latest/download/shift-device-connect.apk",
-  "iosDownloadUrl": "https://testflight.apple.com/join/z2VEmVXp",
-  "publishedAt": "2026-06-23",
-  "releaseNotes": "Short summary of changes; surfaces in the in-app banner."
+  "androidVersionCode": 5
 }
 ```
 
-| Field | Notes |
-|---|---|
-| `version` | Semver, **no `v` prefix**. Must match the `version` field in the operator repo's `app.json` for the build you're shipping. |
-| `iosBuildNumber` | Integer from EAS. Optional for the banner check, but useful to record. |
-| `androidVersionCode` | Integer from EAS. Same. |
-| `androidDownloadUrl` / `iosDownloadUrl` | Usually unchanged release-to-release. |
-| `publishedAt` | ISO date (`YYYY-MM-DD`). |
-| `releaseNotes` | Short summary; surfaces in the banner. |
+`version` is informational (the project's semver in `app.json` is permanently `"1.0.0"` and isn't bumped per release). The banner check on the operator app compares the user's installed iOS `buildNumber` or Android `versionCode` against the published value, per platform.
 
-### Step 3 — Create the GitHub release
+### Why a draft at all (vs. auto-publishing)
 
-1. Go to **Releases > Draft a new release**.
-2. **Tag:** e.g. `v1.0.1`. (The tag string itself doesn't matter to the backend — it reads `version.json`, not the tag — but keep `v`-prefixed tags for GitHub convention.)
-3. **Title:** date, or `v1.0.1`, whichever you prefer.
-4. **Description:** human-readable changelog.
-5. **Attach both files:**
-   - `shift-device-connect.apk`
-   - `version.json` (the one you composed in Step 2)
-6. Click **Publish release**.
+The draft exists so **you** decide when users are told there's an update. Until you publish, users see nothing — even though the EAS build is complete. This lets you wait for TestFlight to finish processing, do any last-minute QA, write proper release notes, etc., before flipping the switch.
 
-### Step 4 — (Optional) Update `version.json` on `main`
+### Only one open draft at a time
 
-Commit the same `version.json` to `main` so anyone browsing the repo at a glance sees the current shipped version. Not required for the banner — the backend reads only the release asset — but it keeps the repo honest and gives the next release a fresh template.
+The backend creates a new draft only when there is no open draft. Subsequent EAS builds (e.g. you rebuild Android after a fix) **update the existing draft in place**: the APK gets replaced, `androidVersionCode` in `version.json` gets bumped. Publishing the draft closes it. The next EAS build then starts a fresh draft.
 
-### How the backend consumes it
+If you ever want to discard an in-progress draft (e.g. you decide a release shouldn't ship), just delete the draft in the GitHub Releases UI. The next EAS build creates a new one.
 
-The backend's `ShiftAppReleaseService` fetches `https://github.com/MicroAGI-Labs/shift-device-connect-distribution/releases/latest/download/version.json` and caches the result for **5 minutes**. Once a new release is published, app clients see the new version on the next foreground after the cache window expires.
+### Setup the backend needs (one-time, already done if you're reading this in production)
 
-The operator app compares its local `Constants.expoConfig.version` (from `app.json`, baked at build time) against `version.json.version` via a semver compare. The backend defensively strips a leading `v` if present, but the convention in `version.json` is no prefix.
+For the EAS-to-draft pipeline to work, the backend has these environment variables set:
+
+- `EAS_WEBHOOK_SECRET` — HMAC secret shared with EAS (via `eas webhook:create`)
+- `DISTRIBUTION_WEBHOOK_SECRET` — HMAC secret configured on this repo's GitHub webhook
+- `GITHUB_DISTRIBUTION_PAT` — Personal Access Token with `repo` scope on this repo, so the backend can create/edit drafts and upload assets
+
+And:
+
+- EAS webhook: `eas webhook:create --event BUILD --url <backend>/webhooks/eas-build --secret $EAS_WEBHOOK_SECRET`
+- GitHub webhook on this repo: Settings → Webhooks → Add webhook
+  - Payload URL: `<backend>/webhooks/distribution-release`
+  - Content type: `application/json`
+  - Secret: `$DISTRIBUTION_WEBHOOK_SECRET`
+  - Events: only "Releases"

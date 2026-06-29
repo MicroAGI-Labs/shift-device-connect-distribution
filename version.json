@@ -1,9 +1,0 @@
-{
-  "version": "1.0.0",
-  "iosBuildNumber": 23,
-  "androidVersionCode": 4,
-  "androidDownloadUrl": "https://github.com/MicroAGI-Labs/shift-device-connect-distribution/releases/latest/download/shift-device-connect.apk",
-  "iosDownloadUrl": "https://testflight.apple.com/join/z2VEmVXp",
-  "publishedAt": "2026-06-23",
-  "releaseNotes": "First public release. US payment fields in registration, BLE protocol v2.0 (per-device-type service UUIDs), Mark2.0 limited UI, virtual record button for Efference devices, in-app + device-firmware update banners, refreshed WiFi screen, GPS accuracy fixes, partner BLE integration guide v2.0."
-}
